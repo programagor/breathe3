@@ -1,9 +1,10 @@
 from kivy.core.audio import SoundLoader
+from kivy.core.image import Image as CoreImage
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.widget import Widget
-from kivy.graphics import Color, Ellipse
+from kivy.graphics import Color, Ellipse, Rectangle
 from kivy.clock import Clock
 from kivy.properties import NumericProperty, ListProperty, BooleanProperty
 from kivy.uix.slider import Slider
@@ -32,8 +33,11 @@ except Exception as e:
 
 
 class AnimatedCircle(Widget):
-    radius_f = NumericProperty(25)
+    radius_a = NumericProperty(75)
     radius_b = NumericProperty(25)
+    radius_c = NumericProperty(25)
+    radius_d = NumericProperty(20)
+    radius_e = NumericProperty(20)
     cycle_time = ListProperty([4, 8, 8, 0])
     animation_active = BooleanProperty(False)
     duration = NumericProperty(5*60)  # Start with infinity
@@ -105,7 +109,6 @@ class AnimatedCircle(Widget):
             angle_change = angle_current - angle_initial
             # Convert angle change to degrees
             angle_change_deg = math.degrees(angle_change)
-
             # Calculate Duration change based on angle (360 degrees = 4 minutes)
             duration_change = - angle_change_deg / 360 * 4
 
@@ -114,9 +117,10 @@ class AnimatedCircle(Widget):
 
             # Update UI elements if they exist
             if self.duration_slider and self.duration_label:
-                if float(self.duration) == float('inf'):
+                if float(self.duration) == float('inf') or self.duration >= 30*60+1:
+                    self.duration = 30*60+1
                     self.duration_slider.value = 30*60+1
-                    self.duration_label.text = f'Duration: infinity'
+                    self.duration_label.text = f'Duration: Infinity'
                 else:
                     self.duration_slider.value = self.duration
                     minutes = int(min(self.duration,30*60+1)) // 60
@@ -137,16 +141,28 @@ class AnimatedCircle(Widget):
     def update_canvas(self, *args):
         self.canvas.clear()
         with self.canvas:
-            Color(0.15, 0.26, 0.91, 1)  # Blue color for Back circle
+            Color(0.094, 0.004, 0.114, 0.25)  # Reference maximum
+            radius_a = (min(self.width, self.height) / 2) * (self.radius_a / 100.0)
+            Ellipse(pos=(self.center_x - radius_a, self.center_y - radius_a), size=(radius_a * 2, radius_a * 2))
+
+            Color(0.95, 0.95, 0.95, 1)  # White, shows only during hold inhale
             radius_b = (min(self.width, self.height) / 2) * (self.radius_b / 100.0)
             Ellipse(pos=(self.center_x - radius_b, self.center_y - radius_b), size=(radius_b * 2, radius_b * 2))
 
-            Color(0.9, 0.8, 0.16, 1)  # Red color for Front circle
-            radius_f = (min(self.width, self.height) / 2) * (self.radius_f / 100.0)
-            Ellipse(pos=(self.center_x - radius_f, self.center_y - radius_f), size=(radius_f * 2, radius_f * 2))
+            Color(0.988, 0.667, 0.992, 1)  # Outer edge
+            radius_c = (min(self.width, self.height) / 2) * (self.radius_c / 100.0)
+            Ellipse(pos=(self.center_x - radius_c, self.center_y - radius_c), size=(radius_c * 2, radius_c * 2))
+
+            Color(0.95, 0.95, 0.95, 1)  # Second frontmost (white, shows only during hold exhaled)
+            radius_d = (min(self.width, self.height) / 2) * (self.radius_d / 100.0)
+            Ellipse(pos=(self.center_x - radius_d, self.center_y - radius_d), size=(radius_d * 2, radius_d * 2))
+
+            Color(0.231, 0.051, 0.286, 1)  # Frontmost (little one, forms inner edge during most, shrinks to zero during hold exhaled)
+            radius_e = (min(self.width, self.height) / 2) * (self.radius_e / 100.0)
+            Ellipse(pos=(self.center_x - radius_e, self.center_y - radius_e), size=(radius_e * 2, radius_e * 2))
 
     def animate_circle(self, dt):
-        if self.duration != float('inf'):
+        if self.duration != float('inf') or self.duration != 30*60+1:
             self.duration -= dt
             # Update the slider and label if they exist
             if self.duration_slider and self.duration_label:
@@ -168,27 +184,35 @@ class AnimatedCircle(Widget):
         self.progress += dt
         if self.phase == 0:
             if t1 > 0:
-                self.radius_f = self.radius_b = 75 - 50 * (1 - self.progress / t1)
+                self.radius_a = 75
+                self.radius_b = self.radius_c = 75 - 50 * (1 - self.progress / t1)
+                self.radius_d = self.radius_e = self.radius_b - 5
             if self.progress > t1:
                 self.phase = 1 
                 self.progress -= t1
         if self.phase == 1:
             if t2 > 0:
-                self.radius_f = 75
+                self.radius_a = 75
                 self.radius_b = 75 + 10 * (1 - abs(self.progress / t2 - 0.5) * 2)  # Peaks at halfway
+                self.radius_c = 75
+                self.radius_d = self.radius_e = 75 - 5
             if self.progress > t2:
                 self.phase = 2
                 self.progress -= t2
         if self.phase == 2:
             if t3 > 0:
-                self.radius_f = self.radius_b = 75 - 50 * self.progress / t3
+                self.radius_a = 75
+                self.radius_b = self.radius_c = 75 - 50 * self.progress / t3
+                self.radius_d = self.radius_e = self.radius_b - 5
             if self.progress > t3:
                 self.phase = 3
                 self.progress -= t3
         if self.phase == 3:
             if t4 > 0:
-                self.radius_b = 25
-                self.radius_f = 25 - 10 * (1 - abs(self.progress / t4 - 0.5) * 2 )  # Dips at halfway
+                self.radius_a = 75
+                self.radius_b = self.radius_c = 25
+                self.radius_d = self.radius_b - 5
+                self.radius_e = 20 - 10 * (1 - abs(self.progress / t4 - 0.5) * 2 )  # Dips at halfway
             if self.progress > t4:
                 self.phase = 0
                 self.progress -= t4
@@ -223,20 +247,53 @@ class AnimatedCircle(Widget):
     
 
 class MainAppLayout(BoxLayout):
+    def _update_rect(self, instance, value):
+        self.rect.size = instance.size
+        self.rect.pos = instance.pos
+
+    def apply_preset(self, preset_name):
+        cycle_times, duration = self.get_presets()[preset_name]
+        # Update cycle time sliders
+        for i, slider in enumerate(self.sliders[:-1]):  # Exclude the duration slider
+            slider.value = cycle_times[i]
+        # Update duration slider and labels accordingly
+        self.sliders[-1].value = duration
+
+
     def __init__(self, **kwargs):
         super(MainAppLayout, self).__init__(**kwargs)
+
+        with self.canvas.before:
+            self.bg = CoreImage("assets/background.png").texture
+            self.rect = Rectangle(texture=self.bg, size=self.size, pos=self.pos)
+        self.bind(size=self._update_rect, pos=self._update_rect)
+
         self.orientation = 'vertical'
 
         duration_slider_label = Label(text='Duration: 5 minutes')
         duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
-        self.animated_circle = AnimatedCircle(size_hint=(1, 0.5), duration_slider=duration_slider, duration_label=duration_slider_label, update_button_label=self.update_start_stop_button_label)
+        self.animated_circle = AnimatedCircle(size_hint=(1, 1.0), duration_slider=duration_slider, duration_label=duration_slider_label, update_button_label=self.update_start_stop_button_label)
 
         self.add_widget(self.animated_circle)
 
         bottom_layout = BoxLayout(size_hint=(1, 0.5), orientation='vertical')
+
         self.start_stop_button = Button(text='Start')
         self.start_stop_button.bind(on_press=self.toggle_animation)
         bottom_layout.add_widget(self.start_stop_button)
+
+        preset_buttons_layout = BoxLayout(size_hint_y=None, height=50)  # Adjust size_hint_y and height as needed
+
+        for preset_name, preset_values in self.get_presets().items():
+            cycle_times, duration_seconds = preset_values
+            duration_minutes = duration_seconds // 60
+            # Format the button text to include cycle times and duration
+            button_text = f"{preset_name}: {'-'.join(map(str, cycle_times))}/{duration_minutes}"
+            btn = Button(text=button_text)
+            btn.bind(on_press=lambda instance, name=preset_name: self.apply_preset(name))
+            preset_buttons_layout.add_widget(btn)
+
+        bottom_layout.add_widget(preset_buttons_layout)  # Add this before the duration slider is added
 
         self.sliders = []  # Store slider references
 
@@ -260,28 +317,35 @@ class MainAppLayout(BoxLayout):
         self.sliders.append(duration_slider)  # Optional, depending on how you handle updates
         bottom_layout.add_widget(duration_slider_layout)
 
-        self.load_presets()
+        self.load_saved()
 
-    def load_presets(self):
+    def load_saved(self):
         try:
-            with open(self.preset_file_path(), 'r') as f:
-                presets = json.load(f)
+            with open(self.save_file_path(), 'r') as f:
+                saved = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
-            presets = [4, 8, 8, 0]  # Default values
+            saved = [4, 8, 8, 0]  # Default values
 
         for i, slider in enumerate(self.sliders[:-1]):  # Exclude the duration slider
-            slider.value = presets[i]
+            slider.value = saved[i]
 
-        # Update the cycle_time directly after loading the presets
-        self.animated_circle.cycle_time = presets
+        # Update the cycle_time directly after loading the savefile
+        self.animated_circle.cycle_time = saved
 
-    def save_presets(self):
-        presets = [slider.value for slider in self.sliders[:-1]]  # Exclude the duration slider
-        with open(self.preset_file_path(), 'w') as f:
-            json.dump(presets, f)
+    def save_state(self):
+        state = [slider.value for slider in self.sliders[:-1]]  # Exclude the duration slider
+        with open(self.save_file_path(), 'w') as f:
+            json.dump(state, f)
 
-    def preset_file_path(self):
-        return os.path.join(App.get_running_app().user_data_dir, 'slider_presets.json')
+    def save_file_path(self):
+        return os.path.join(App.get_running_app().user_data_dir, 'previous_state.json')
+
+    def get_presets(self):
+        return {
+            'Chill': ([4, 9, 9, 0], 30*60),  # Preset values: cycle times and duration in seconds
+            'Sleep': ([4, 7, 8, 0], 20*60),
+            # Add more presets here
+        }
 
     def update_start_stop_button_label(self, new_label):
         self.start_stop_button.text = new_label
@@ -303,14 +367,14 @@ class MainAppLayout(BoxLayout):
         def update_label(instance, value):
             slider_label.text = f'{label}: {int(value)} seconds'
             self.animated_circle.cycle_time[index] = value
-            self.save_presets()  # Save presets whenever a slider value changes
+            self.save_state()  # Save slider state whenever a slider value changes
         return update_label
 
     def update_duration_slider_label(self, slider_label):
         def update_label(instance, value):
             if float(value) == float('inf') or int(value) >= 30*60+1:  # Assuming 31 is the maximum value representing infinity
                 slider_label.text = 'Duration: Infinity'
-                self.animated_circle.duration = float('inf')
+                self.animated_circle.duration = 30*60+1
             else:
                 minutes = int(value) // 60
                 seconds = int(value) - 60 * minutes

@@ -40,7 +40,8 @@ class AnimatedCircle(Widget):
     radius_e = NumericProperty(20)
     cycle_time = ListProperty([4, 8, 8, 0])
     animation_active = BooleanProperty(False)
-    duration = NumericProperty(5*60)  # Start with infinity
+    duration = NumericProperty(5*60)  # Start with 5 minutes
+    selected_duration = NumericProperty(5*60)  # Default to 5 minutes
 
     def __init__(self, duration_slider=None, duration_label=None, update_button_label=None, **kwargs):
         super(AnimatedCircle, self).__init__(**kwargs)
@@ -114,6 +115,8 @@ class AnimatedCircle(Widget):
 
             # Update Duration, ensuring it doesn't go below 0
             self.duration = max(0, self.duration + duration_change * 60)  # Convert minutes to seconds
+            if self.animation_active == False:
+                self.selected_duration = max(0, self.selected_duration + duration_change * 60)  # Update selected_duration as well
 
             # Update UI elements if they exist
             if self.duration_slider and self.duration_label:
@@ -237,9 +240,11 @@ class AnimatedCircle(Widget):
                 wake_lock.release()
             if self.update_button_label:
                 self.update_button_label('Start')
-            self.duration = 5*60
-            self.duration_slider.value = 5*60
-            self.duration_label.text = f'Duration: 5 minutes'
+
+            self.duration = self.selected_duration
+            self.duration_slider.value = self.selected_duration
+            minutes, seconds = divmod(int(self.selected_duration), 60)
+            self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
 
         Clock.schedule_once(release_wake_lock_callback, 2)
 
@@ -258,6 +263,7 @@ class MainAppLayout(BoxLayout):
             slider.value = cycle_times[i]
         # Update duration slider and labels accordingly
         self.sliders[-1].value = duration
+        self.animated_circle.selected_duration = duration  # Update selected_duration
 
 
     def __init__(self, **kwargs):
@@ -288,7 +294,7 @@ class MainAppLayout(BoxLayout):
             cycle_times, duration_seconds = preset_values
             duration_minutes = duration_seconds // 60
             # Format the button text to include cycle times and duration
-            button_text = f"{preset_name}: {'-'.join(map(str, cycle_times))}/{duration_minutes}"
+            button_text = f"{preset_name}\n{'-'.join(map(str, cycle_times))}/{duration_minutes}"
             btn = Button(text=button_text)
             btn.bind(on_press=lambda instance, name=preset_name: self.apply_preset(name))
             preset_buttons_layout.add_widget(btn)
@@ -323,19 +329,31 @@ class MainAppLayout(BoxLayout):
         try:
             with open(self.save_file_path(), 'r') as f:
                 saved = json.load(f)
+            cycle_times = saved.get('cycle_times', [4, 8, 8, 0])  # Default values if not found
+            selected_duration = saved.get('selected_duration', 5*60)  # Default to 5 minutes if not found
         except (FileNotFoundError, json.JSONDecodeError):
-            saved = [4, 8, 8, 0]  # Default values
+            cycle_times = [4, 8, 8, 0]  # Default values
+            selected_duration = 5*60  # Default to 5 minutes
 
         for i, slider in enumerate(self.sliders[:-1]):  # Exclude the duration slider
-            slider.value = saved[i]
+            slider.value = cycle_times[i]
 
-        # Update the cycle_time directly after loading the savefile
-        self.animated_circle.cycle_time = saved
+        self.sliders[-1].value = selected_duration  # Assuming the last slider is for duration
+        self.animated_circle.selected_duration = selected_duration
+        self.animated_circle.duration = selected_duration  # Ensure the current duration matches
+        # Update UI elements to reflect the loaded selected_duration
+        minutes, seconds = divmod(int(selected_duration), 60)
+        self.animated_circle.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+
 
     def save_state(self):
-        state = [slider.value for slider in self.sliders[:-1]]  # Exclude the duration slider
+        state = {
+            'cycle_times': [slider.value for slider in self.sliders[:-1]],  # Exclude the duration slider
+            'selected_duration': self.animated_circle.selected_duration,
+        }
         with open(self.save_file_path(), 'w') as f:
             json.dump(state, f)
+
 
     def save_file_path(self):
         return os.path.join(App.get_running_app().user_data_dir, 'previous_state.json')
@@ -383,6 +401,10 @@ class MainAppLayout(BoxLayout):
                 else:
                     slider_label.text = f'Duration: {seconds} seconds'
                 self.animated_circle.duration = value
+                if self.animated_circle.animation_active == False:
+                    self.animated_circle.selected_duration = value  # Update selected_duration as well
+            self.save_state()  # Save slider state whenever a slider value changes
+
         return update_label
 
 class MainApp(App):

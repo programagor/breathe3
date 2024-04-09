@@ -10,8 +10,25 @@ from kivy.uix.slider import Slider
 from kivy.uix.label import Label
 import os
 import json
+import math
 
+from jnius import autoclass, JavaException
 
+try:
+    PowerManager = autoclass('android.os.PowerManager')
+    Context = autoclass('android.content.Context')
+    PythonActivity = autoclass('org.kivy.android.PythonActivity')
+
+    activity = PythonActivity.mActivity
+    power_manager = activity.getSystemService(Context.POWER_SERVICE)
+
+    wake_lock = power_manager.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, 'Breathe3:WakelockTag')
+except JavaException as je:
+    wake_lock = None
+    print(f"Java Exception: {je}")
+except Exception as e:
+    wake_lock = None
+    print(f"General Exception: {e}")
 
 
 class AnimatedCircle(Widget):
@@ -21,10 +38,11 @@ class AnimatedCircle(Widget):
     animation_active = BooleanProperty(False)
     duration = NumericProperty(5*60)  # Start with infinity
 
-    def __init__(self, duration_slider=None, duration_label=None, **kwargs):
+    def __init__(self, duration_slider=None, duration_label=None, update_button_label=None, **kwargs):
         super(AnimatedCircle, self).__init__(**kwargs)
         self.duration_slider = duration_slider
         self.duration_label = duration_label
+        self.update_button_label = update_button_label
         self.bind(size=self.update_canvas, pos=self.update_canvas)
         self.phase = 0
         self.last_phase = -1
@@ -52,6 +70,7 @@ class AnimatedCircle(Widget):
         if touch.grab_current is self:
             # Process the touch movement only if it started within this widget
             self.handle_touch_movement(touch.pos)
+            self.initial_touch_pos = touch.pos
             return True
         return super(AnimatedCircle, self).on_touch_move(touch)
 
@@ -77,20 +96,35 @@ class AnimatedCircle(Widget):
             # Calculate angles
             angle_initial = math.atan2(vec_initial[1], vec_initial[0])
             angle_current = math.atan2(vec_current[1], vec_current[0])
+            # TODO: need to consider the smaller (closest) change option, otherwise we wrap around
+            if angle_initial - angle_current < - math.pi:
+                angle_current -= 2 * math.pi
+            elif angle_initial - angle_current > math.pi:
+                angle_current += 2 * math.pi
             # Calculate change in angle (in radians)
             angle_change = angle_current - angle_initial
             # Convert angle change to degrees
             angle_change_deg = math.degrees(angle_change)
 
-            # Calculate Duration change based on angle (360 degrees = 1 minute)
-            duration_change = angle_change_deg / 360
+            # Calculate Duration change based on angle (360 degrees = 4 minutes)
+            duration_change = - angle_change_deg / 360 * 4
 
             # Update Duration, ensuring it doesn't go below 0
             self.duration = max(0, self.duration + duration_change * 60)  # Convert minutes to seconds
 
             # Update UI elements if they exist
             if self.duration_slider and self.duration_label:
-                self.duration_slider.value = self.duration
+                if float(self.duration) == float('inf'):
+                    self.duration_slider.value = 30*60+1
+                    self.duration_label.text = f'Duration: infinity'
+                else:
+                    self.duration_slider.value = self.duration
+                    minutes = int(min(self.duration,30*60+1)) // 60
+                    seconds = int(min(self.duration,30*60+1)) - 60 * minutes
+                    if minutes > 0:
+                        self.duration_label.text = f'Duration: {minutes} minutes'
+                    else:
+                        self.duration_label.text = f'Duration: {seconds} seconds'
 
     def toggle_animation(self):
         if self.animation_active:
@@ -103,11 +137,11 @@ class AnimatedCircle(Widget):
     def update_canvas(self, *args):
         self.canvas.clear()
         with self.canvas:
-            Color(0.15, 0.12, 95, 1)  # Blue color for Back circle
+            Color(0.15, 0.26, 0.91, 1)  # Blue color for Back circle
             radius_b = (min(self.width, self.height) / 2) * (self.radius_b / 100.0)
             Ellipse(pos=(self.center_x - radius_b, self.center_y - radius_b), size=(radius_b * 2, radius_b * 2))
 
-            Color(0.95, 0.9, 0.1, 1)  # Red color for Front circle
+            Color(0.9, 0.8, 0.16, 1)  # Red color for Front circle
             radius_f = (min(self.width, self.height) / 2) * (self.radius_f / 100.0)
             Ellipse(pos=(self.center_x - radius_f, self.center_y - radius_f), size=(radius_f * 2, radius_f * 2))
 
@@ -122,7 +156,7 @@ class AnimatedCircle(Widget):
                 minutes = int(self.duration) // 60
                 seconds = int(self.duration) - 60 * minutes
                 if minutes > 0:
-                    self.duration_label.text = f'Duration: {minutes} minutes {seconds} seconds'
+                    self.duration_label.text = f'Duration: {minutes} minutes'
                 else:
                     self.duration_label.text = f'Duration: {seconds} seconds'
 
@@ -158,7 +192,6 @@ class AnimatedCircle(Widget):
             if self.progress > t4:
                 self.phase = 0
                 self.progress -= t4
-            
 
         if self.phase != self.last_phase:
             sound = self.sounds.get(self.phase)
@@ -175,14 +208,29 @@ class AnimatedCircle(Widget):
         if sound:
             sound.play()
 
+        def release_wake_lock_callback(dt):  # 'dt' parameter is required by Clock.schedule_once but might not be used
+            if wake_lock and wake_lock.isHeld():
+                wake_lock.release()
+            if self.update_button_label:
+                self.update_button_label('Start')
+            self.duration = 5*60
+            self.duration_slider.value = 5*60
+            self.duration_label.text = f'Duration: 5 minutes'
+
+        Clock.schedule_once(release_wake_lock_callback, 2)
+
+
+    
+
 class MainAppLayout(BoxLayout):
     def __init__(self, **kwargs):
         super(MainAppLayout, self).__init__(**kwargs)
         self.orientation = 'vertical'
 
-        duration_slider_label = Label(text='Duration: 5 minutes 0 seconds')
-        duration_slider = Slider(min=0, max=30*60+1, value=5*60)  # Assuming 30*60+1 represents infinity
-        self.animated_circle = AnimatedCircle(size_hint=(1, 0.5), duration_slider=duration_slider, duration_label=duration_slider_label)
+        duration_slider_label = Label(text='Duration: 5 minutes')
+        duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
+        self.animated_circle = AnimatedCircle(size_hint=(1, 0.5), duration_slider=duration_slider, duration_label=duration_slider_label, update_button_label=self.update_start_stop_button_label)
+
         self.add_widget(self.animated_circle)
 
         bottom_layout = BoxLayout(size_hint=(1, 0.5), orientation='vertical')
@@ -196,7 +244,7 @@ class MainAppLayout(BoxLayout):
         for i, label in enumerate(['Inhale', 'Hold 1', 'Exhale', 'Hold 2']):
             slider_layout = BoxLayout(orientation='horizontal')
             slider_label = Label(text=f'{label}: 5 seconds' if label not in ['Hold 1', 'Hold 2'] else f'{label}: 0 seconds')
-            slider = Slider(min=0, max=30, value=5 if label not in ['Hold 1', 'Hold 2'] else 0)
+            slider = Slider(min=0, max=20, value=5 if label not in ['Hold 1', 'Hold 2'] else 0, size_hint_x=1.5)
             slider.bind(value=self.update_slider_label(slider_label, label, i))
             slider_layout.add_widget(slider_label)
             slider_layout.add_widget(slider)
@@ -235,12 +283,21 @@ class MainAppLayout(BoxLayout):
     def preset_file_path(self):
         return os.path.join(App.get_running_app().user_data_dir, 'slider_presets.json')
 
+    def update_start_stop_button_label(self, new_label):
+        self.start_stop_button.text = new_label
 
     def toggle_animation(self, instance):
         # Update the animation cycle_time before starting
         self.animated_circle.cycle_time = [slider.value for slider in self.sliders]
         self.animated_circle.toggle_animation()
-        instance.text = 'Stop' if self.animated_circle.animation_active else 'Start'
+        if self.animated_circle.animation_active:
+            instance.text = 'Stop'
+            if wake_lock:
+                wake_lock.acquire()
+        else:
+            instance.text = 'Start'
+            if wake_lock and wake_lock.isHeld():
+                wake_lock.release()
 
     def update_slider_label(self, slider_label, label, index):
         def update_label(instance, value):
@@ -251,14 +308,14 @@ class MainAppLayout(BoxLayout):
 
     def update_duration_slider_label(self, slider_label):
         def update_label(instance, value):
-            minutes = int(value) // 60
-            seconds = int(value) - 60 * minutes
-            if int(value) == 30*60+1:  # Assuming 31 is the maximum value representing infinity
+            if float(value) == float('inf') or int(value) >= 30*60+1:  # Assuming 31 is the maximum value representing infinity
                 slider_label.text = 'Duration: Infinity'
                 self.animated_circle.duration = float('inf')
             else:
+                minutes = int(value) // 60
+                seconds = int(value) - 60 * minutes
                 if minutes > 0:
-                    slider_label.text = f'Duration: {minutes} minutes {seconds} seconds'
+                    slider_label.text = f'Duration: {minutes} minutes'
                 else:
                     slider_label.text = f'Duration: {seconds} seconds'
                 self.animated_circle.duration = value

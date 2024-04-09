@@ -1,3 +1,4 @@
 buildozer
 kivy
 cython
+pyjnius

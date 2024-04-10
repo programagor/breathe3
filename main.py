@@ -131,7 +131,7 @@ class AnimatedCircle(Widget):
             if self.duration_slider and self.duration_label:
                 if self.duration == float('inf') or self.duration >= 30*60+1:
                     self.duration_slider.value = 30*60+1
-                    self.duration_label.text = f'Time: Infinity'
+                    self.duration_label.text = f'Time: ∞'
                 else:
                     self.duration_slider.value = self.duration
                     minutes, seconds = divmod(int(self.duration), 60)
@@ -183,7 +183,7 @@ class AnimatedCircle(Widget):
                 self.stop_animation_with_end_sound()
                 return  # Stop the method here
         
-        t1, t2, t3, t4, _ = self.cycle_time
+        t1, t2, t3, t4 = self.cycle_time[0:4]
         self.progress += dt
         if self.phase == 0:
             if t1 > 0:
@@ -239,7 +239,7 @@ class AnimatedCircle(Widget):
             self.duration = self.selected_duration
             if self.duration == float('inf') or self.duration >= 30*60+1:
                 self.duration_slider.value = 30*60+1
-                self.duration_label.text = f'Time: Infinity'
+                self.duration_label.text = f'Time: ∞'
             else:
                 self.duration_slider.value = self.selected_duration
                 minutes, seconds = divmod(int(self.selected_duration), 60)
@@ -365,7 +365,7 @@ class MainAppLayout(BoxLayout):
         if selected_duration == float('inf') or selected_duration >= 30*60+1:
             selected_duration = float('inf')
             self.sliders[-1].value = 30*60+1
-            self.duration_label.text = f'Time: Infinity'
+            self.duration_label.text = f'Time: ∞'
         else:
             selected_duration = max(0,selected_duration)
             self.sliders[-1].value = selected_duration
@@ -398,21 +398,54 @@ class MainAppLayout(BoxLayout):
         self.start_stop_button.text = new_label
 
     def toggle_animation(self, instance):
-        # Update the animation cycle_time before starting
-        self.animated_circle.cycle_time = [slider.value for slider in self.sliders]
+        # Check if the animation is about to start
         if instance.text == 'Start':
             instance.text = 'Stop'
-            if wake_lock:
-                wake_lock.acquire()
-            # TODO: Insert countdown (the timer_label needs to go 5 to 1 before the animation starts.
-            
-            self.animated_circle.toggle_animation(True)
-            
+            # Prepare the countdown
+            self.countdown_from = 5  # Start from 5
+            self.update_countdown_label(self.countdown_from)
+            self.perform_countdown(instance)  # Begin the countdown sequence
         else:
+            # If the button is pressed to stop the animation
             self.animated_circle.toggle_animation(False)
+            if self.countdown_schedule:
+                self.countdown_schedule.cancel()
+                if self.animated_circle.duration == float('inf') or self.animated_circle.duration > 30*60+1:
+                    self.timer_label.text = '∞'
+                else:
+                    self.timer_label.text = f'{int(self.animated_circle.duration // 60)}:00'
             instance.text = 'Start'
             if wake_lock and wake_lock.isHeld():
                 wake_lock.release()
+
+    def update_countdown_label(self, number):
+        if number > 0:
+            self.timer_label.text = str(number)
+        else:
+            if self.animated_circle.duration == float('inf') or self.animated_circle.duration >= 30*60+1:
+                self.timer_label.text = '∞'
+            else:
+                self.timer_label.text = ''
+
+    def perform_countdown(self, instance):
+        if self.countdown_from > 0:
+            # Update the label to show the countdown
+            self.update_countdown_label(self.countdown_from)
+            # Schedule the next countdown step after 1 second
+            self.countdown_schedule = Clock.schedule_once(lambda dt: self.countdown_step(instance), 1)
+
+    def countdown_step(self, instance):
+        self.countdown_from -= 1  # Decrement the countdown
+        if self.countdown_from > 0:
+            # Continue the countdown if not yet at 0
+            self.perform_countdown(instance)
+        else:
+            # Countdown is complete, update the UI and start the animation
+            self.update_countdown_label(self.countdown_from)  # This will clear the countdown label
+            if wake_lock:
+                wake_lock.acquire()
+            self.animated_circle.toggle_animation(True)
+
 
     def toggle_settings(self, instance):
         if self.settings_visible:
@@ -440,9 +473,9 @@ class MainAppLayout(BoxLayout):
     def update_duration_slider_label(self, slider_label):
         def update_label(instance, value):
             if value == float('inf') or value >= 30*60+1:  # Assuming >30 is the maximum value representing infinity
-                slider_label.text = 'Time: Infinity'
+                slider_label.text = 'Time: ∞'
                 self.animated_circle.duration = float('inf')
-                self.timer_label.text = ''
+                self.timer_label.text = '∞'
             else:
                 minutes, seconds = divmod(int(value), 60)
                 slider_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'

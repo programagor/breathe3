@@ -38,13 +38,14 @@ class AnimatedCircle(Widget):
     radius_c = 25
     radius_d = 20
     radius_e = 20
-    cycle_time = ListProperty([4, 8, 8, 0])
+    cycle_time = [4, 8, 8, 0]
     animation_active = BooleanProperty(False)
     duration = NumericProperty(5*60)  # Start with 5 minutes
-    selected_duration = NumericProperty(5*60)  # Default to 5 minutes
+    selected_duration = 5*60  # Default to 5 minutes
 
     def __init__(self, duration_slider=None, duration_label=None, update_button_label=None, **kwargs):
         super(AnimatedCircle, self).__init__(**kwargs)
+        self.framerate = 1/60
         self.duration_slider = duration_slider
         self.duration_label = duration_label
         self.update_button_label = update_button_label
@@ -53,7 +54,7 @@ class AnimatedCircle(Widget):
         self.last_phase = -1
         self.progress = 0
         self.initial_touch_pos = None  # To store the initial touch position
-        self.animation_event = Clock.schedule_interval(self.animate_circle, 0.1)
+        self.animation_event = Clock.schedule_interval(self.animate_circle, self.framerate)
         self.animation_event.cancel()  # Start with the animation paused
         self.sounds = {
             0: SoundLoader.load('assets/ding_inhale_to_hold.wav'),
@@ -141,7 +142,7 @@ class AnimatedCircle(Widget):
             self.animation_event.cancel()
             self.animation_active = False
         else:
-            self.animation_event = Clock.schedule_interval(self.animate_circle, 0.1)
+            self.animation_event = Clock.schedule_interval(self.animate_circle, self.framerate)
             self.animation_active = True
 
     def update_canvas(self, *args):
@@ -285,6 +286,7 @@ class MainAppLayout(BoxLayout):
 
         self.start_stop_button = Button(text='Start')
         self.start_stop_button.bind(on_press=self.toggle_animation)
+        self.start_stop_button.background_color = (0.1,0.1,0.1,0.75)
         bottom_layout.add_widget(self.start_stop_button)
 
         preset_buttons_layout = BoxLayout(size_hint_y=None, height=50)  # Adjust size_hint_y and height as needed
@@ -294,8 +296,9 @@ class MainAppLayout(BoxLayout):
             duration_minutes = duration_seconds // 60
             # Format the button text to include cycle times and duration
             button_text = f"{preset_name}\n{'-'.join(map(str, cycle_times))}/{duration_minutes}"
-            btn = Button(text=button_text)
+            btn = Button(text=button_text, halign="center")
             btn.bind(on_press=lambda instance, name=preset_name: self.apply_preset(name))
+            btn.background_color = (0.1,0.1,0.1,0.75)
             preset_buttons_layout.add_widget(btn)
 
         bottom_layout.add_widget(preset_buttons_layout)  # Add this before the duration slider is added

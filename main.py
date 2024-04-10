@@ -1,9 +1,13 @@
 from kivy.core.audio import SoundLoader
 from kivy.core.image import Image as CoreImage
+from kivy.core.window import Window
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.widget import Widget
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.popup import Popup
+from kivy.uix.textinput import TextInput
 from kivy.graphics import Color, Ellipse, Rectangle
 from kivy.clock import Clock
 from kivy.properties import NumericProperty, ListProperty, BooleanProperty
@@ -135,6 +139,8 @@ class AnimatedCircle(Widget):
                 else:
                     self.duration_slider.value = self.duration
                     minutes, seconds = divmod(int(self.duration), 60)
+                    if minutes:
+                        minutes = int((self.duration+30)//60)
                     self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
 
     def toggle_animation(self,enable):
@@ -177,6 +183,8 @@ class AnimatedCircle(Widget):
                 self.duration_slider.value = max(0, min(self.duration, self.duration_slider.max - 1))
                 
                 minutes, seconds = divmod(int(self.duration), 60)
+                if minutes:
+                    minutes = int((self.duration+30)//60)
                 self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
 
             if self.duration <= 0:
@@ -243,12 +251,94 @@ class AnimatedCircle(Widget):
             else:
                 self.duration_slider.value = self.selected_duration
                 minutes, seconds = divmod(int(self.selected_duration), 60)
+                if minutes:
+                    minutes = int((self.duration+30)//60)
                 self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
 
         Clock.schedule_once(release_wake_lock_callback, 2)
 
+class EditPresetsPopup(Popup):
+    def __init__(self, presets, on_save=None, **kwargs):  # Accept a callback function
+        super().__init__(**kwargs)
+        self.presets = presets
+        self.on_save = on_save  # Store the callback
+        self.layout = BoxLayout(orientation='vertical')
+        self.rows = BoxLayout(orientation='vertical', size_hint_y=None)
+        self.layout.add_widget(self.rows)
+        self.add_row_button = Button(text='Add Row', size_hint_y=None, height=50)
+        self.add_row_button.bind(on_press=self.add_row)
+        self.layout.add_widget(self.add_row_button)
+        self.save_button = Button(text='Save', size_hint_y=None, height=50)
+        self.save_button.bind(on_press=self.save_presets)
+        self.layout.add_widget(self.save_button)
+        self.title = 'Edit Presets'
+        self.content = self.layout
+        self.size_hint = (0.9, 0.9)
+        self.populate_initial_rows()
 
-    
+    def populate_initial_rows(self):
+        for preset_name, preset_values in self.presets.items():
+            self.add_row(preset_name=preset_name, preset_values=preset_values)
+
+    def add_row(self, instance=None, preset_name='New preset', preset_values=([5,0,5,0], 10*60)):
+        row = BoxLayout(size_hint_y=None, height=40)
+        name_input = TextInput(text=preset_name, multiline=False)
+        values_input = TextInput(text=str(f'{preset_values[0][0]}-{preset_values[0][1]}-{preset_values[0][2]}-{preset_values[0][3]}'), multiline=False)
+        duration_input = TextInput(text=str(int(preset_values[1]//60)), multiline=False)
+        delete_button = Button(text='Delete', size_hint_x=None, width=100)
+        delete_button.bind(on_press=lambda x: self.delete_row(row))
+        row.add_widget(Label(text='Name:'))
+        row.add_widget(name_input)
+        row.add_widget(Label(text='Values:'))
+        row.add_widget(values_input)
+        row.add_widget(Label(text='Time:'))
+        row.add_widget(duration_input)
+        row.add_widget(delete_button)
+        self.rows.add_widget(row)
+
+    def delete_row(self, row):
+        self.rows.remove_widget(row)
+
+    def save_presets(self, instance):
+        new_presets = {}
+        for row in self.rows.children:
+            try:
+                # Extract data from inputs
+                preset_name = row.children[5].text.strip()
+                values_str = row.children[3].text.strip()
+                duration_str = row.children[1].text.strip()
+                
+                # Parse and validate values
+                values = [int(v) for v in values_str.split('-')]
+                if len(values) != 4 or any(v < 0 for v in values):
+                    raise ValueError('Invalid cycle values')
+                duration = int(duration_str) * 60  # Convert minutes to seconds
+                if duration < 0:
+                    raise ValueError('Invalid duration')
+
+                # Generate a unique name if preset_name already exists
+                original_preset_name = preset_name
+                suffix = 1
+                while preset_name in new_presets:
+                    preset_name = f"{original_preset_name} ({suffix})"
+                    suffix += 1
+
+                # Save the validated preset with a unique name
+                new_presets[preset_name] = (values, duration)
+            except ValueError as e:
+                print(f"Error saving presets: {e}")
+                continue  # Skip saving if any errors occurred
+
+        # Save new_presets to file
+        presets_path = os.path.join(App.get_running_app().user_data_dir, 'presets.json')
+        with open(presets_path, 'w') as f:
+            json.dump(new_presets, f)
+        
+        self.presets.update(new_presets)  # Update in-memory presets
+        if self.on_save:
+            self.on_save(new_presets)  # Call the callback function with the updated presets
+        self.dismiss()  # Close the popup
+
 
 class MainAppLayout(BoxLayout):
     def _update_rect(self, instance, value):
@@ -256,7 +346,7 @@ class MainAppLayout(BoxLayout):
         self.rect.pos = instance.pos
 
     def apply_preset(self, preset_name):
-        cycle_times, duration = self.get_presets()[preset_name]
+        cycle_times, duration = self.presets[preset_name]
         # Update cycle time sliders
         for i, slider in enumerate(self.sliders[:-1]):  # Exclude the duration slider
             slider.value = cycle_times[i]
@@ -264,6 +354,53 @@ class MainAppLayout(BoxLayout):
         self.sliders[-1].value = duration
         self.animated_circle.selected_duration = duration  # Update selected_duration
 
+    def update_presets(self, new_presets): # Callback for editor
+        self.presets = new_presets
+        self.create_preset_buttons()  # Refresh preset buttons
+
+    def load_or_init_presets(self):
+        default_presets = {
+            'Chill': ([4, 9, 9, 0], 30*60),
+            'Sleep': ([4, 7, 8, 0], 20*60),
+            'Slerp': ([4, 8, 8, 0], 15*60),
+            # Add more default presets here
+        }
+        presets_path = os.path.join(App.get_running_app().user_data_dir, 'presets.json')
+        try:
+            with open(presets_path, 'r') as f:
+                presets = json.load(f)
+            # Perform any necessary validation of presets here
+        except (FileNotFoundError, json.JSONDecodeError, ValueError):
+            presets = default_presets
+            with open(presets_path, 'w') as f:
+                json.dump(presets, f)
+        return presets
+
+    def create_preset_buttons(self):
+        self.preset_buttons_layout.clear_widgets()
+
+        min_button_width = 350  # Define a minimum width for each button
+        num_buttons = len(self.presets) + 1  # +1 for the "Edit" button
+        self.preset_buttons_layout.width = max(self.width, min_button_width * num_buttons)
+
+        for preset_name, preset_values in self.presets.items():
+            cycle_times, duration_seconds = preset_values
+            duration_minutes = int((duration_seconds+30) // 60)
+            # Format the button text to include cycle times and duration
+            button_text = f"{preset_name}\n{'-'.join(map(str, cycle_times))}/{duration_minutes}"
+            btn = Button(text=button_text, halign="center", bold=True, size_hint_x=None, width=min_button_width)
+            btn.bind(on_press=lambda instance, name=preset_name: self.apply_preset(name))
+            btn.background_color = (0.1,0.1,0.1,0.75)
+            self.preset_buttons_layout.add_widget(btn)
+
+        self.edit_presets_btn = Button(text="Edit", bold=True, size_hint_x=None, width=min_button_width)
+        self.edit_presets_btn.bind(on_press=lambda instance: self.open_edit_presets_popup())
+        self.edit_presets_btn.background_color = (0.1,0.1,0.1,0.75)
+        self.preset_buttons_layout.add_widget(self.edit_presets_btn)
+
+    def open_edit_presets_popup(self):
+        popup = EditPresetsPopup(presets=self.presets, on_save=self.update_presets)  # Pass callback here
+        popup.open()
 
     def __init__(self, **kwargs):
         super(MainAppLayout, self).__init__(**kwargs)
@@ -274,6 +411,8 @@ class MainAppLayout(BoxLayout):
         self.bind(size=self._update_rect, pos=self._update_rect)
 
         self.orientation = 'vertical'
+
+        self.presets = self.load_or_init_presets()
 
         self.duration_label = Label(text='Time: 5 minutes', bold=True, width=350, size_hint_x=None)
         self.duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
@@ -291,7 +430,7 @@ class MainAppLayout(BoxLayout):
 
         start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=75)
 
-        settings_button = Button(text='Settings', size_hint_x=0.2)
+        settings_button = Button(text='Settings', bold=True, size_hint_x=0.2)
         settings_button.background_color = (0.1,0.1,0.1,0.75)
         
         settings_button.bind(on_press=self.toggle_settings)
@@ -311,19 +450,14 @@ class MainAppLayout(BoxLayout):
 
         self.bottom_layout.add_widget(self.settings_layout)
 
-        preset_buttons_layout = BoxLayout(size_hint_y=None, height=150)  # Adjust size_hint_y and height as needed
+        preset_buttons_scrollview = ScrollView(size_hint=(1, None), height=150, do_scroll_x=True, do_scroll_y=False, bar_width=10)
 
-        for preset_name, preset_values in self.get_presets().items():
-            cycle_times, duration_seconds = preset_values
-            duration_minutes = duration_seconds // 60
-            # Format the button text to include cycle times and duration
-            button_text = f"{preset_name}\n{'-'.join(map(str, cycle_times))}/{duration_minutes}"
-            btn = Button(text=button_text, halign="center", bold=True)
-            btn.bind(on_press=lambda instance, name=preset_name: self.apply_preset(name))
-            btn.background_color = (0.1,0.1,0.1,0.75)
-            preset_buttons_layout.add_widget(btn)
+        self.preset_buttons_layout = BoxLayout(size_hint=(None, None), height=150)  # Adjust size_hint_y and height as needed
+        #self.preset_buttons_layout.bind(minimum_width=self.preset_buttons_layout.setter('width'))
+        preset_buttons_scrollview.add_widget(self.preset_buttons_layout)
+        self.settings_layout.add_widget(preset_buttons_scrollview)  # Add this before the duration slider is added
 
-        self.settings_layout.add_widget(preset_buttons_layout)  # Add this before the duration slider is added
+        self.create_preset_buttons()
 
         self.sliders = []  # Store slider references
 
@@ -370,6 +504,8 @@ class MainAppLayout(BoxLayout):
             selected_duration = max(0,selected_duration)
             self.sliders[-1].value = selected_duration
             minutes, seconds = divmod(int(selected_duration), 60)
+            if minutes:
+                minutes = int((selected_duration+30)//60)
             self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
         self.animated_circle.selected_duration = selected_duration
         self.animated_circle.duration = selected_duration
@@ -387,19 +523,15 @@ class MainAppLayout(BoxLayout):
     def save_file_path(self):
         return os.path.join(App.get_running_app().user_data_dir, 'previous_state.json')
 
-    def get_presets(self):
-        return {
-            'Chill': ([4, 9, 9, 0], 30*60),  # Preset values: cycle times and duration in seconds
-            'Sleep': ([4, 7, 8, 0], 20*60),
-            # Add more presets here
-        }
-
     def update_start_stop_button_label(self, new_label):
         self.start_stop_button.text = new_label
 
     def toggle_animation(self, instance):
         # Check if the animation is about to start
         if instance.text == 'Start':
+            self.animated_circle.phase = 0
+            self.animated_circle.last_phase = -1
+            self.animated_circle.progress = 0
             instance.text = 'Stop'
             # Prepare the countdown
             self.countdown_from = 5  # Start from 5
@@ -413,7 +545,7 @@ class MainAppLayout(BoxLayout):
                 if self.animated_circle.duration == float('inf') or self.animated_circle.duration > 30*60+1:
                     self.timer_label.text = '∞'
                 else:
-                    self.timer_label.text = f'{int(self.animated_circle.duration // 60)}:00'
+                    self.timer_label.text = f'{int((self.animated_circle.duration+30) // 60)}:00'
             instance.text = 'Start'
             if wake_lock and wake_lock.isHeld():
                 wake_lock.release()
@@ -481,6 +613,7 @@ class MainAppLayout(BoxLayout):
                 slider_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
                 if self.animated_circle.animation_active == False:
                     seconds=0
+                    minutes = int((value+30) // 60)
                 self.timer_label.text = f'{minutes}:{seconds:02d}'
                 self.animated_circle.duration = value
             if self.animated_circle.animation_active == False:

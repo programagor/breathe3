@@ -35,6 +35,12 @@ except Exception as e:
     wake_lock = None
     print(f"General Exception: {e}")
 
+def sin_intp(x):
+    return (1-math.cos(x*math.pi))/2
+def cub_intp(x):
+    if x>1:
+        x = 2-x
+    return -2*x**3+3*x**2
 
 class AnimatedCircle(Widget):
     radius_a = 75
@@ -193,16 +199,17 @@ class AnimatedCircle(Widget):
         
         t1, t2, t3, t4 = self.cycle_time[0:4]
         self.progress += dt
+        
         if self.phase == 0:
             if t1 > 0:
-                self.radius_b = self.radius_c = 75 - 50 * (1 - self.progress / t1)
+                self.radius_b = self.radius_c = 75 - 50 * (1 - cub_intp(self.progress / t1))
                 self.radius_d = self.radius_e = self.radius_b - 5
             if self.progress > t1:
                 self.phase = 1 
                 self.progress -= t1
         if self.phase == 1:
             if t2 > 0:
-                self.radius_b = 75 + 10 * (1 - abs(self.progress / t2 - 0.5) * 2)  # Peaks at halfway
+                self.radius_b = 75 + 15 * cub_intp(self.progress / t2 * 2)  # Peaks at halfway
                 self.radius_c = 75
                 self.radius_d = self.radius_e = 75 - 5
             if self.progress > t2:
@@ -210,7 +217,7 @@ class AnimatedCircle(Widget):
                 self.progress -= t2
         if self.phase == 2:
             if t3 > 0:
-                self.radius_b = self.radius_c = 75 - 50 * self.progress / t3
+                self.radius_b = self.radius_c = 75 - 50 * cub_intp(self.progress / t3)
                 self.radius_d = self.radius_e = self.radius_b - 5
             if self.progress > t3:
                 self.phase = 3
@@ -219,7 +226,7 @@ class AnimatedCircle(Widget):
             if t4 > 0:
                 self.radius_b = self.radius_c = 25
                 self.radius_d = self.radius_b - 5
-                self.radius_e = 20 - 10 * (1 - abs(self.progress / t4 - 0.5) * 2 )  # Dips at halfway
+                self.radius_e = 20 - 10 * cub_intp(self.progress / t4 * 2 )  # Dips at halfway
             if self.progress > t4:
                 self.phase = 0
                 self.progress -= t4
@@ -267,15 +274,16 @@ class EditPresetsPopup(Popup):
         self.rows = BoxLayout(orientation='vertical', size_hint=(1,None), height=80*len(presets))
         self.scrollable.add_widget(self.rows)
         self.layout.add_widget(self.scrollable)
-        self.add_row_button = Button(text='Add Row', size_hint_y=None, height=50)
+        self.add_row_button = Button(text='Add Row', size_hint_y=None, height=80)
         self.add_row_button.bind(on_press=self.add_row)
         self.layout.add_widget(self.add_row_button)
-        self.save_button = Button(text='Save', size_hint_y=None, height=50)
+        self.save_button = Button(text='Save', size_hint_y=None, height=80)
         self.save_button.bind(on_press=self.save_presets)
         self.layout.add_widget(self.save_button)
         self.title = 'Edit Presets'
         self.content = self.layout
-        self.size_hint = (0.9, 0.9)
+        self.size_hint = (0.9, 0.6)
+        self.pos_hint = {'top': 1} 
         self.populate_initial_rows()
 
     def populate_initial_rows(self):
@@ -420,19 +428,19 @@ class MainAppLayout(BoxLayout):
 
         self.duration_label = Label(text='Time: 5 minutes', bold=True, width=350, size_hint_x=None)
         self.duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
-        self.animated_circle = AnimatedCircle(size_hint=(1, 0.4), duration_slider=self.duration_slider, duration_label=self.duration_label, update_button_label=self.update_start_stop_button_label)
+        self.animated_circle = AnimatedCircle(size_hint=(1, 0.8), duration_slider=self.duration_slider, duration_label=self.duration_label, update_button_label=self.update_start_stop_button_label)
 
         self.add_widget(self.animated_circle)
 
         self.bottom_layout = BoxLayout(size_hint=(1, 0.6), orientation='vertical')
 
-        self.timer_label = Label(text='', bold=True, size_hint_y=None ,height=75)
+        self.timer_label = Label(text='', bold=True, size_hint_y=None ,height=75, font_size=24)
         self.bottom_layout.add_widget(self.timer_label)
 
         self.sequence_label = Label(text='0-0-0-0', bold=True, size_hint_y=None ,height=75)
         self.bottom_layout.add_widget(self.sequence_label)
 
-        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=75)
+        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=90)
 
         settings_button = Button(text='Settings', bold=True, size_hint_x=0.2)
         settings_button.background_color = (0.1,0.1,0.1,0.75)
@@ -450,9 +458,9 @@ class MainAppLayout(BoxLayout):
         self.bottom_layout.add_widget(start_button_layout)
 
         self.settings_layout = BoxLayout(orientation='vertical')
-        self.settings_visible = True
+        self.settings_visible = False
 
-        self.bottom_layout.add_widget(self.settings_layout)
+        #self.bottom_layout.add_widget(self.settings_layout)
 
         preset_buttons_scrollview = ScrollView(size_hint=(1, None), height=150, do_scroll_x=True, do_scroll_y=False, bar_width=10)
 
@@ -593,7 +601,7 @@ class MainAppLayout(BoxLayout):
             # Settings are hidden, reattach the layout
             self.bottom_layout.add_widget(self.settings_layout)
             self.settings_visible = True  # Update visibility state
-            self.animated_circle.size_hint_y = 0.4
+            self.animated_circle.size_hint_y = 0.2
 
 
     def update_slider_label(self, slider_label, label, index):

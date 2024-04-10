@@ -33,11 +33,11 @@ except Exception as e:
 
 
 class AnimatedCircle(Widget):
-    radius_a = NumericProperty(75)
-    radius_b = NumericProperty(25)
-    radius_c = NumericProperty(25)
-    radius_d = NumericProperty(20)
-    radius_e = NumericProperty(20)
+    radius_a = 75
+    radius_b = 25
+    radius_c = 25
+    radius_d = 20
+    radius_e = 20
     cycle_time = ListProperty([4, 8, 8, 0])
     animation_active = BooleanProperty(False)
     duration = NumericProperty(5*60)  # Start with 5 minutes
@@ -101,7 +101,6 @@ class AnimatedCircle(Widget):
             # Calculate angles
             angle_initial = math.atan2(vec_initial[1], vec_initial[0])
             angle_current = math.atan2(vec_current[1], vec_current[0])
-            # TODO: need to consider the smaller (closest) change option, otherwise we wrap around
             if angle_initial - angle_current < - math.pi:
                 angle_current -= 2 * math.pi
             elif angle_initial - angle_current > math.pi:
@@ -111,27 +110,31 @@ class AnimatedCircle(Widget):
             # Convert angle change to degrees
             angle_change_deg = math.degrees(angle_change)
             # Calculate Duration change based on angle (360 degrees = 4 minutes)
-            duration_change = - angle_change_deg / 360 * 4
+            duration_change = - angle_change_deg / 360 * 4 * 60 
 
-            # Update Duration, ensuring it doesn't go below 0
-            self.duration = max(0, self.duration + duration_change * 60)  # Convert minutes to seconds
+            # Update Duration, handling the maximum as infinity.
+            if ( (self.duration == float('inf') or self.duration >= 30*60+1) and duration_change < 0 ) :
+                self.duration = 30*60+1 + duration_change
+            elif ( (self.duration == float('inf') or self.duration >= 30*60+1 and duration_change > 0) ):
+                self.duration = float('inf')
+            else:
+                self.duration += duration_change
+            self.duration = max(0,self.duration)
+            if self.duration >= 30*60+1:
+                self.duration = float('inf')
+
             if self.animation_active == False:
                 self.selected_duration = max(0, self.selected_duration + duration_change * 60)  # Update selected_duration as well
 
             # Update UI elements if they exist
             if self.duration_slider and self.duration_label:
-                if float(self.duration) == float('inf') or self.duration >= 30*60+1:
-                    self.duration = 30*60+1
+                if self.duration == float('inf') or self.duration >= 30*60+1:
                     self.duration_slider.value = 30*60+1
                     self.duration_label.text = f'Duration: Infinity'
                 else:
                     self.duration_slider.value = self.duration
-                    minutes = int(min(self.duration,30*60+1)) // 60
-                    seconds = int(min(self.duration,30*60+1)) - 60 * minutes
-                    if minutes > 0:
-                        self.duration_label.text = f'Duration: {minutes} minutes'
-                    else:
-                        self.duration_label.text = f'Duration: {seconds} seconds'
+                    minutes, seconds = divmod(int(self.duration), 60)
+                    self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
 
     def toggle_animation(self):
         if self.animation_active:
@@ -165,19 +168,15 @@ class AnimatedCircle(Widget):
             Ellipse(pos=(self.center_x - radius_e, self.center_y - radius_e), size=(radius_e * 2, radius_e * 2))
 
     def animate_circle(self, dt):
-        if self.duration != float('inf') or self.duration != 30*60+1:
+        if self.duration != float('inf') and self.duration < 30*60+1:
             self.duration -= dt
             # Update the slider and label if they exist
             if self.duration_slider and self.duration_label:
                 # Assuming the max value represents infinity and should not be used here
                 self.duration_slider.value = max(0, min(self.duration, self.duration_slider.max - 1))
-
-                minutes = int(self.duration) // 60
-                seconds = int(self.duration) - 60 * minutes
-                if minutes > 0:
-                    self.duration_label.text = f'Duration: {minutes} minutes'
-                else:
-                    self.duration_label.text = f'Duration: {seconds} seconds'
+                
+                minutes, seconds = divmod(int(self.duration), 60)
+                self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
 
             if self.duration <= 0:
                 self.stop_animation_with_end_sound()
@@ -276,9 +275,9 @@ class MainAppLayout(BoxLayout):
 
         self.orientation = 'vertical'
 
-        duration_slider_label = Label(text='Duration: 5 minutes')
-        duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
-        self.animated_circle = AnimatedCircle(size_hint=(1, 1.0), duration_slider=duration_slider, duration_label=duration_slider_label, update_button_label=self.update_start_stop_button_label)
+        self.duration_label = Label(text='Duration: 5 minutes')
+        self.duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
+        self.animated_circle = AnimatedCircle(size_hint=(1, 1.0), duration_slider=self.duration_slider, duration_label=self.duration_label, update_button_label=self.update_start_stop_button_label)
 
         self.add_widget(self.animated_circle)
 
@@ -306,8 +305,8 @@ class MainAppLayout(BoxLayout):
         # Modify slider creation loop to store references
         for i, label in enumerate(['Inhale', 'Hold 1', 'Exhale', 'Hold 2']):
             slider_layout = BoxLayout(orientation='horizontal')
-            slider_label = Label(text=f'{label}: 5 seconds' if label not in ['Hold 1', 'Hold 2'] else f'{label}: 0 seconds')
-            slider = Slider(min=0, max=20, value=5 if label not in ['Hold 1', 'Hold 2'] else 0, size_hint_x=1.5)
+            slider_label = Label(text=f'{label}: 0 seconds')
+            slider = Slider(min=0 if label in ['Hold 1', 'Hold 2'] else 2, max=20, value=0, size_hint_x=1.5)
             slider.bind(value=self.update_slider_label(slider_label, label, i))
             slider_layout.add_widget(slider_label)
             slider_layout.add_widget(slider)
@@ -317,10 +316,10 @@ class MainAppLayout(BoxLayout):
         self.add_widget(bottom_layout)
 
         duration_slider_layout = BoxLayout(orientation='horizontal')
-        duration_slider.bind(value=self.update_duration_slider_label(duration_slider_label))
-        duration_slider_layout.add_widget(duration_slider_label)
-        duration_slider_layout.add_widget(duration_slider)
-        self.sliders.append(duration_slider)  # Optional, depending on how you handle updates
+        self.duration_slider.bind(value=self.update_duration_slider_label(self.duration_label))
+        duration_slider_layout.add_widget(self.duration_label)
+        duration_slider_layout.add_widget(self.duration_slider)
+        self.sliders.append(self.duration_slider)  # Optional, depending on how you handle updates
         bottom_layout.add_widget(duration_slider_layout)
 
         self.load_saved()
@@ -338,12 +337,17 @@ class MainAppLayout(BoxLayout):
         for i, slider in enumerate(self.sliders[:-1]):  # Exclude the duration slider
             slider.value = cycle_times[i]
 
-        self.sliders[-1].value = selected_duration  # Assuming the last slider is for duration
+        if selected_duration == float('inf') or selected_duration >= 30*60+1:
+            selected_duration = float('inf')
+            self.sliders[-1].value = 30*60+1
+            self.duration_label.text = f'Duration: Infinity'
+        else:
+            selected_duration = max(0,selected_duration)
+            self.sliders[-1].value = selected_duration
+            minutes, seconds = divmod(int(selected_duration), 60)
+            self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
         self.animated_circle.selected_duration = selected_duration
-        self.animated_circle.duration = selected_duration  # Ensure the current duration matches
-        # Update UI elements to reflect the loaded selected_duration
-        minutes, seconds = divmod(int(selected_duration), 60)
-        self.animated_circle.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+        self.animated_circle.duration = selected_duration
 
 
     def save_state(self):
@@ -390,20 +394,16 @@ class MainAppLayout(BoxLayout):
 
     def update_duration_slider_label(self, slider_label):
         def update_label(instance, value):
-            if float(value) == float('inf') or int(value) >= 30*60+1:  # Assuming 31 is the maximum value representing infinity
+            if value == float('inf') or value >= 30*60+1:  # Assuming >30 is the maximum value representing infinity
                 slider_label.text = 'Duration: Infinity'
-                self.animated_circle.duration = 30*60+1
+                self.animated_circle.duration = float('inf')
             else:
-                minutes = int(value) // 60
-                seconds = int(value) - 60 * minutes
-                if minutes > 0:
-                    slider_label.text = f'Duration: {minutes} minutes'
-                else:
-                    slider_label.text = f'Duration: {seconds} seconds'
+                minutes, seconds = divmod(int(value), 60)
+                slider_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
                 self.animated_circle.duration = value
-                if self.animated_circle.animation_active == False:
-                    self.animated_circle.selected_duration = value  # Update selected_duration as well
-            self.save_state()  # Save slider state whenever a slider value changes
+            if self.animated_circle.animation_active == False:
+                self.animated_circle.selected_duration = value
+            self.save_state()  # Save slider state to file whenever a slider value changes
 
         return update_label
 

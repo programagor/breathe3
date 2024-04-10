@@ -16,6 +16,7 @@ from kivy.uix.label import Label
 import os
 import json
 import math
+import time
 
 from jnius import autoclass, JavaException
 
@@ -78,6 +79,8 @@ class AnimatedCircle(Widget):
         # Check if the touch is within the widget bounds
         if self.collide_point(*touch.pos):
             self.initial_touch_pos = touch.pos
+            self.touch_start = touch.pos
+            self.touch_start_time = time.time()  # Record the start time
             touch.grab(self)  # Important to track touch across movements
             return True
         return super(AnimatedCircle, self).on_touch_down(touch)
@@ -92,10 +95,29 @@ class AnimatedCircle(Widget):
 
     def on_touch_up(self, touch):
         if touch.grab_current is self:
-            touch.ungrab(self)  # Release the touch
-            self.initial_touch_pos = None  # Reset initial position
+            touch.ungrab(self)
+            final_touch_pos = touch.pos
+            
+            # Calculate the distance moved
+            dx = final_touch_pos[0] - self.touch_start[0]
+            dy = final_touch_pos[1] - self.touch_start[1]
+            distance_moved = math.sqrt(dx ** 2 + dy ** 2)
+
+            touch_duration = time.time() - self.touch_start_time
+            
+            # If the distance is below a threshold, consider it a tap
+            if distance_moved < 10 and touch_duration < 0.5:
+                self.handle_tap()
+            
+            self.touch_start = None  # Reset initial position
             return True
         return super(AnimatedCircle, self).on_touch_up(touch)
+
+    def handle_tap(self):
+        app = App.get_running_app()
+        main_layout = app.root
+        start_stop_button = main_layout.start_stop_button  # Ensure you have a reference to this button in your layout
+        main_layout.toggle_animation(start_stop_button)
 
     def handle_touch_movement(self, touch_pos):
         if self.initial_touch_pos:
@@ -440,7 +462,7 @@ class MainAppLayout(BoxLayout):
         self.sequence_label = Label(text='0-0-0-0', bold=True, size_hint_y=None ,height=75)
         self.bottom_layout.add_widget(self.sequence_label)
 
-        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=125)
+        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=150)
 
         settings_button = Button(text='Settings', bold=True, size_hint_x=0.2)
         settings_button.background_color = (0.1,0.1,0.1,0.75)

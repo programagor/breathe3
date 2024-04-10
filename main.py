@@ -57,10 +57,10 @@ class AnimatedCircle(Widget):
         self.animation_event = Clock.schedule_interval(self.animate_circle, self.framerate)
         self.animation_event.cancel()  # Start with the animation paused
         self.sounds = {
-            0: SoundLoader.load('assets/ding_inhale_to_hold.wav'),
-            1: SoundLoader.load('assets/ding_hold_to_exhale.wav'),
-            2: SoundLoader.load('assets/ding_exhale_to_hold.wav'),
-            3: SoundLoader.load('assets/ding_hold_to_inhale.wav'),
+            0: SoundLoader.load('assets/ding_inhale.wav'),
+            1: SoundLoader.load('assets/ding_hold1.wav'),
+            2: SoundLoader.load('assets/ding_exhale.wav'),
+            3: SoundLoader.load('assets/ding_hold2.wav'),
             4: SoundLoader.load('assets/ding_end.wav')  # Add an end sound
         }
 
@@ -131,14 +131,14 @@ class AnimatedCircle(Widget):
             if self.duration_slider and self.duration_label:
                 if self.duration == float('inf') or self.duration >= 30*60+1:
                     self.duration_slider.value = 30*60+1
-                    self.duration_label.text = f'Duration: Infinity'
+                    self.duration_label.text = f'Time: Infinity'
                 else:
                     self.duration_slider.value = self.duration
                     minutes, seconds = divmod(int(self.duration), 60)
-                    self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+                    self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
 
-    def toggle_animation(self):
-        if self.animation_active:
+    def toggle_animation(self,enable):
+        if not enable:
             self.animation_event.cancel()
             self.animation_active = False
         else:
@@ -152,7 +152,7 @@ class AnimatedCircle(Widget):
             radius_a = (min(self.width, self.height) / 2) * (self.radius_a / 100.0)
             Ellipse(pos=(self.center_x - radius_a, self.center_y - radius_a), size=(radius_a * 2, radius_a * 2))
 
-            Color(0.95, 0.95, 0.95, 1)  # White, shows only during hold inhale
+            Color(0.95, 0.95, 0.95, 0.75)  # White, shows only during hold inhale
             radius_b = (min(self.width, self.height) / 2) * (self.radius_b / 100.0)
             Ellipse(pos=(self.center_x - radius_b, self.center_y - radius_b), size=(radius_b * 2, radius_b * 2))
 
@@ -177,7 +177,7 @@ class AnimatedCircle(Widget):
                 self.duration_slider.value = max(0, min(self.duration, self.duration_slider.max - 1))
                 
                 minutes, seconds = divmod(int(self.duration), 60)
-                self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+                self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
 
             if self.duration <= 0:
                 self.stop_animation_with_end_sound()
@@ -187,7 +187,6 @@ class AnimatedCircle(Widget):
         self.progress += dt
         if self.phase == 0:
             if t1 > 0:
-                self.radius_a = 75
                 self.radius_b = self.radius_c = 75 - 50 * (1 - self.progress / t1)
                 self.radius_d = self.radius_e = self.radius_b - 5
             if self.progress > t1:
@@ -195,7 +194,6 @@ class AnimatedCircle(Widget):
                 self.progress -= t1
         if self.phase == 1:
             if t2 > 0:
-                self.radius_a = 75
                 self.radius_b = 75 + 10 * (1 - abs(self.progress / t2 - 0.5) * 2)  # Peaks at halfway
                 self.radius_c = 75
                 self.radius_d = self.radius_e = 75 - 5
@@ -204,7 +202,6 @@ class AnimatedCircle(Widget):
                 self.progress -= t2
         if self.phase == 2:
             if t3 > 0:
-                self.radius_a = 75
                 self.radius_b = self.radius_c = 75 - 50 * self.progress / t3
                 self.radius_d = self.radius_e = self.radius_b - 5
             if self.progress > t3:
@@ -212,7 +209,6 @@ class AnimatedCircle(Widget):
                 self.progress -= t3
         if self.phase == 3:
             if t4 > 0:
-                self.radius_a = 75
                 self.radius_b = self.radius_c = 25
                 self.radius_d = self.radius_b - 5
                 self.radius_e = 20 - 10 * (1 - abs(self.progress / t4 - 0.5) * 2 )  # Dips at halfway
@@ -230,21 +226,24 @@ class AnimatedCircle(Widget):
         
     def stop_animation_with_end_sound(self):
         self.animation_event.cancel()
-        self.animation_active = False
         sound = self.sounds.get(4)  # End sound
         if sound:
             sound.play()
 
         def release_wake_lock_callback(dt):  # 'dt' parameter is required by Clock.schedule_once but might not be used
+            self.animation_active = False
             if wake_lock and wake_lock.isHeld():
                 wake_lock.release()
             if self.update_button_label:
                 self.update_button_label('Start')
-
             self.duration = self.selected_duration
-            self.duration_slider.value = self.selected_duration
-            minutes, seconds = divmod(int(self.selected_duration), 60)
-            self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+            if self.duration == float('inf') or self.duration >= 30*60+1:
+                self.duration_slider.value = 30*60+1
+                self.duration_label.text = f'Time: Infinity'
+            else:
+                self.duration_slider.value = self.selected_duration
+                minutes, seconds = divmod(int(self.selected_duration), 60)
+                self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
 
         Clock.schedule_once(release_wake_lock_callback, 2)
 
@@ -276,54 +275,77 @@ class MainAppLayout(BoxLayout):
 
         self.orientation = 'vertical'
 
-        self.duration_label = Label(text='Duration: 5 minutes')
+        self.duration_label = Label(text='Time: 5 minutes', bold=True, width=350, size_hint_x=None)
         self.duration_slider = Slider(min=0, max=30*60+1, value=5*60, size_hint_x=1.5)  # Assuming 30*60+1 represents infinity
-        self.animated_circle = AnimatedCircle(size_hint=(1, 1.0), duration_slider=self.duration_slider, duration_label=self.duration_label, update_button_label=self.update_start_stop_button_label)
+        self.animated_circle = AnimatedCircle(size_hint=(1, 0.4), duration_slider=self.duration_slider, duration_label=self.duration_label, update_button_label=self.update_start_stop_button_label)
 
         self.add_widget(self.animated_circle)
 
-        bottom_layout = BoxLayout(size_hint=(1, 0.5), orientation='vertical')
+        self.bottom_layout = BoxLayout(size_hint=(1, 0.6), orientation='vertical')
 
-        self.start_stop_button = Button(text='Start')
+        self.timer_label = Label(text='', bold=True, size_hint_y=None ,height=75)
+        self.bottom_layout.add_widget(self.timer_label)
+
+        self.sequence_label = Label(text='0-0-0-0', bold=True, size_hint_y=None ,height=75)
+        self.bottom_layout.add_widget(self.sequence_label)
+
+        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=75)
+
+        settings_button = Button(text='Settings', size_hint_x=0.2)
+        settings_button.background_color = (0.1,0.1,0.1,0.75)
+        
+        settings_button.bind(on_press=self.toggle_settings)
+
+        start_button_layout.add_widget(settings_button)
+
+        self.start_stop_button = Button(text='Start', bold=True)
         self.start_stop_button.bind(on_press=self.toggle_animation)
         self.start_stop_button.background_color = (0.1,0.1,0.1,0.75)
-        bottom_layout.add_widget(self.start_stop_button)
 
-        preset_buttons_layout = BoxLayout(size_hint_y=None, height=50)  # Adjust size_hint_y and height as needed
+        start_button_layout.add_widget(self.start_stop_button)
+
+        self.bottom_layout.add_widget(start_button_layout)
+
+        self.settings_layout = BoxLayout(orientation='vertical')
+        self.settings_visible = True
+
+        self.bottom_layout.add_widget(self.settings_layout)
+
+        preset_buttons_layout = BoxLayout(size_hint_y=None, height=150)  # Adjust size_hint_y and height as needed
 
         for preset_name, preset_values in self.get_presets().items():
             cycle_times, duration_seconds = preset_values
             duration_minutes = duration_seconds // 60
             # Format the button text to include cycle times and duration
             button_text = f"{preset_name}\n{'-'.join(map(str, cycle_times))}/{duration_minutes}"
-            btn = Button(text=button_text, halign="center")
+            btn = Button(text=button_text, halign="center", bold=True)
             btn.bind(on_press=lambda instance, name=preset_name: self.apply_preset(name))
             btn.background_color = (0.1,0.1,0.1,0.75)
             preset_buttons_layout.add_widget(btn)
 
-        bottom_layout.add_widget(preset_buttons_layout)  # Add this before the duration slider is added
+        self.settings_layout.add_widget(preset_buttons_layout)  # Add this before the duration slider is added
 
         self.sliders = []  # Store slider references
 
         # Modify slider creation loop to store references
         for i, label in enumerate(['Inhale', 'Hold 1', 'Exhale', 'Hold 2']):
             slider_layout = BoxLayout(orientation='horizontal')
-            slider_label = Label(text=f'{label}: 0 seconds')
-            slider = Slider(min=0 if label in ['Hold 1', 'Hold 2'] else 2, max=20, value=0, size_hint_x=1.5)
+            slider_label = Label(text=f'{label}: 0 seconds', bold=True, width=350, size_hint_x=None)
+            slider = Slider(min=0 if label in ['Hold 1', 'Hold 2'] else 2, max=20, value=0)
             slider.bind(value=self.update_slider_label(slider_label, label, i))
             slider_layout.add_widget(slider_label)
             slider_layout.add_widget(slider)
-            self.sliders.append(slider)  # Store reference to slider
-            bottom_layout.add_widget(slider_layout)
-
-        self.add_widget(bottom_layout)
+            self.sliders.append(slider)
+            self.settings_layout.add_widget(slider_layout)
 
         duration_slider_layout = BoxLayout(orientation='horizontal')
         self.duration_slider.bind(value=self.update_duration_slider_label(self.duration_label))
         duration_slider_layout.add_widget(self.duration_label)
         duration_slider_layout.add_widget(self.duration_slider)
-        self.sliders.append(self.duration_slider)  # Optional, depending on how you handle updates
-        bottom_layout.add_widget(duration_slider_layout)
+        self.sliders.append(self.duration_slider)
+        self.settings_layout.add_widget(duration_slider_layout)
+
+        self.add_widget(self.bottom_layout)
 
         self.load_saved()
 
@@ -343,12 +365,12 @@ class MainAppLayout(BoxLayout):
         if selected_duration == float('inf') or selected_duration >= 30*60+1:
             selected_duration = float('inf')
             self.sliders[-1].value = 30*60+1
-            self.duration_label.text = f'Duration: Infinity'
+            self.duration_label.text = f'Time: Infinity'
         else:
             selected_duration = max(0,selected_duration)
             self.sliders[-1].value = selected_duration
             minutes, seconds = divmod(int(selected_duration), 60)
-            self.duration_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+            self.duration_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
         self.animated_circle.selected_duration = selected_duration
         self.animated_circle.duration = selected_duration
 
@@ -378,31 +400,55 @@ class MainAppLayout(BoxLayout):
     def toggle_animation(self, instance):
         # Update the animation cycle_time before starting
         self.animated_circle.cycle_time = [slider.value for slider in self.sliders]
-        self.animated_circle.toggle_animation()
-        if self.animated_circle.animation_active:
+        if instance.text == 'Start':
             instance.text = 'Stop'
             if wake_lock:
                 wake_lock.acquire()
+            # TODO: Insert countdown (the timer_label needs to go 5 to 1 before the animation starts.
+            
+            self.animated_circle.toggle_animation(True)
+            
         else:
+            self.animated_circle.toggle_animation(False)
             instance.text = 'Start'
             if wake_lock and wake_lock.isHeld():
                 wake_lock.release()
+
+    def toggle_settings(self, instance):
+        if self.settings_visible:
+            # Settings are currently visible, remove the layout
+            self.bottom_layout.remove_widget(self.settings_layout)
+            self.settings_visible = False  # Update visibility state
+            self.animated_circle.size_hint_y = 0.8
+        else:
+            # Settings are hidden, reattach the layout
+            self.bottom_layout.add_widget(self.settings_layout)
+            self.settings_visible = True  # Update visibility state
+            self.animated_circle.size_hint_y = 0.4
+
 
     def update_slider_label(self, slider_label, label, index):
         def update_label(instance, value):
             slider_label.text = f'{label}: {int(value)} seconds'
             self.animated_circle.cycle_time[index] = value
             self.save_state()  # Save slider state whenever a slider value changes
+            # break into pieces by the "-" symbol, change the index-th element to a new value, then reassemble into a string.
+            self.sequence_label.text = "-".join(str(int(value)) if i == index else part for i, part in enumerate(self.sequence_label.text.split("-")))
+
         return update_label
 
     def update_duration_slider_label(self, slider_label):
         def update_label(instance, value):
             if value == float('inf') or value >= 30*60+1:  # Assuming >30 is the maximum value representing infinity
-                slider_label.text = 'Duration: Infinity'
+                slider_label.text = 'Time: Infinity'
                 self.animated_circle.duration = float('inf')
+                self.timer_label.text = ''
             else:
                 minutes, seconds = divmod(int(value), 60)
-                slider_label.text = f'Duration: {minutes} minutes' if minutes else f'Duration: {seconds} seconds'
+                slider_label.text = f'Time: {minutes} minutes' if minutes else f'Time: {seconds} seconds'
+                if self.animated_circle.animation_active == False:
+                    seconds=0
+                self.timer_label.text = f'{minutes}:{seconds:02d}'
                 self.animated_circle.duration = value
             if self.animated_circle.animation_active == False:
                 self.animated_circle.selected_duration = value

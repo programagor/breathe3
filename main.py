@@ -292,7 +292,7 @@ class EditPresetsPopup(Popup):
         self.presets = presets
         self.on_save = on_save  # Store the callback
         self.layout = BoxLayout(orientation='vertical')
-        self.scrollable = ScrollView(size_hint=(1,1), do_scroll_x=False, do_scroll_y=True, bar_width=10) # TODO: Why not scrolling?
+        self.scrollable = ScrollView(size_hint=(1,1), do_scroll_x=False, do_scroll_y=True, bar_width=10)
         self.rows = BoxLayout(orientation='vertical', size_hint=(1,None), height=80*len(presets))
         self.scrollable.add_widget(self.rows)
         self.layout.add_widget(self.scrollable)
@@ -335,7 +335,7 @@ class EditPresetsPopup(Popup):
 
     def save_presets(self, instance):
         new_presets = {}
-        for row in self.rows.children:
+        for row in reversed(self.rows.children):
             try:
                 # Extract data from inputs
                 preset_name = row.children[5].text.strip()

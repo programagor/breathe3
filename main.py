@@ -297,9 +297,11 @@ class EditPresetsPopup(Popup):
         row.add_widget(duration_input)
         row.add_widget(delete_button)
         self.rows.add_widget(row)
+        self.rows.height = 80*len(self.rows.children)
 
     def delete_row(self, row):
         self.rows.remove_widget(row)
+        self.rows.height = 80*len(self.rows.children)
 
     def save_presets(self, instance):
         new_presets = {}

@@ -434,13 +434,13 @@ class MainAppLayout(BoxLayout):
 
         self.bottom_layout = BoxLayout(size_hint=(1, 0.6), orientation='vertical')
 
-        self.timer_label = Label(text='', bold=True, size_hint_y=None ,height=75, font_size=24)
+        self.timer_label = Label(text='', bold=True, size_hint_y=None ,height=75, font_size=72)
         self.bottom_layout.add_widget(self.timer_label)
 
         self.sequence_label = Label(text='0-0-0-0', bold=True, size_hint_y=None ,height=75)
         self.bottom_layout.add_widget(self.sequence_label)
 
-        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=90)
+        start_button_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=125)
 
         settings_button = Button(text='Settings', bold=True, size_hint_x=0.2)
         settings_button.background_color = (0.1,0.1,0.1,0.75)

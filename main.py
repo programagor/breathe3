@@ -263,8 +263,10 @@ class EditPresetsPopup(Popup):
         self.presets = presets
         self.on_save = on_save  # Store the callback
         self.layout = BoxLayout(orientation='vertical')
-        self.rows = BoxLayout(orientation='vertical', size_hint_y=None)
-        self.layout.add_widget(self.rows)
+        self.scrollable = ScrollView(size_hint=(1,1), do_scroll_x=False, do_scroll_y=True, bar_width=10) # TODO: Why not scrolling?
+        self.rows = BoxLayout(orientation='vertical', size_hint=(1,None), height=80*len(presets))
+        self.scrollable.add_widget(self.rows)
+        self.layout.add_widget(self.scrollable)
         self.add_row_button = Button(text='Add Row', size_hint_y=None, height=50)
         self.add_row_button.bind(on_press=self.add_row)
         self.layout.add_widget(self.add_row_button)
@@ -281,7 +283,7 @@ class EditPresetsPopup(Popup):
             self.add_row(preset_name=preset_name, preset_values=preset_values)
 
     def add_row(self, instance=None, preset_name='New preset', preset_values=([5,0,5,0], 10*60)):
-        row = BoxLayout(size_hint_y=None, height=40)
+        row = BoxLayout(size_hint_y=None, height=80)
         name_input = TextInput(text=preset_name, multiline=False)
         values_input = TextInput(text=str(f'{preset_values[0][0]}-{preset_values[0][1]}-{preset_values[0][2]}-{preset_values[0][3]}'), multiline=False)
         duration_input = TextInput(text=str(int(preset_values[1]//60)), multiline=False)

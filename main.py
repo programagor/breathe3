@@ -1,7 +1,12 @@
+import os
+import sys
+import json
+import math
+import time
+
 from kivy.core.audio import SoundLoader
 from kivy.core.image import Image as CoreImage
 from kivy.core.window import Window
-from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.widget import Widget
@@ -13,14 +18,13 @@ from kivy.clock import Clock
 from kivy.properties import NumericProperty, ListProperty, BooleanProperty
 from kivy.uix.slider import Slider
 from kivy.uix.label import Label
-import os
-import json
-import math
-import time
 
-from jnius import autoclass, JavaException
+
+
+wake_lock = None
 
 try:
+    from jnius import autoclass, JavaException
     PowerManager = autoclass('android.os.PowerManager')
     Context = autoclass('android.content.Context')
     PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -29,12 +33,21 @@ try:
     power_manager = activity.getSystemService(Context.POWER_SERVICE)
 
     wake_lock = power_manager.newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK, 'Breathe3:WakelockTag')
+except ImportError:
+    print("Jnius is not available. Wakelock functionality will be disabled.")
 except JavaException as je:
-    wake_lock = None
     print(f"Java Exception: {je}")
 except Exception as e:
-    wake_lock = None
     print(f"General Exception: {e}")
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 def sin_intp(x):
     return (1-math.cos(x*math.pi))/2
@@ -68,11 +81,11 @@ class AnimatedCircle(Widget):
         self.animation_event = Clock.schedule_interval(self.animate_circle, self.framerate)
         self.animation_event.cancel()  # Start with the animation paused
         self.sounds = {
-            0: SoundLoader.load('assets/ding_inhale.wav'),
-            1: SoundLoader.load('assets/ding_hold1.wav'),
-            2: SoundLoader.load('assets/ding_exhale.wav'),
-            3: SoundLoader.load('assets/ding_hold2.wav'),
-            4: SoundLoader.load('assets/ding_end.wav')  # Add an end sound
+            0: SoundLoader.load(resource_path('assets/ding_inhale.wav')),
+            1: SoundLoader.load(resource_path('assets/ding_hold1.wav')),
+            2: SoundLoader.load(resource_path('assets/ding_exhale.wav')),
+            3: SoundLoader.load(resource_path('assets/ding_hold2.wav')),
+            4: SoundLoader.load(resource_path('assets/ding_end.wav'))
         }
 
     def on_touch_down(self, touch):
@@ -114,6 +127,7 @@ class AnimatedCircle(Widget):
         return super(AnimatedCircle, self).on_touch_up(touch)
 
     def handle_tap(self):
+        from kivy.app import App
         app = App.get_running_app()
         main_layout = app.root
         start_stop_button = main_layout.start_stop_button  # Ensure you have a reference to this button in your layout
@@ -364,6 +378,7 @@ class EditPresetsPopup(Popup):
                 continue  # Skip saving if any errors occurred
 
         # Save new_presets to file
+        from kivy.app import App
         presets_path = os.path.join(App.get_running_app().user_data_dir, 'presets.json')
         with open(presets_path, 'w') as f:
             json.dump(new_presets, f)
@@ -399,6 +414,7 @@ class MainAppLayout(BoxLayout):
             'Slerp': ([4, 8, 8, 0], 15*60),
             # Add more default presets here
         }
+        from kivy.app import App
         presets_path = os.path.join(App.get_running_app().user_data_dir, 'presets.json')
         try:
             with open(presets_path, 'r') as f:
@@ -440,7 +456,7 @@ class MainAppLayout(BoxLayout):
         super(MainAppLayout, self).__init__(**kwargs)
 
         with self.canvas.before:
-            self.bg = CoreImage("assets/background.png").texture
+            self.bg = CoreImage(resource_path('assets/background.png')).texture
             self.rect = Rectangle(texture=self.bg, size=self.size, pos=self.pos)
         self.bind(size=self._update_rect, pos=self._update_rect)
 
@@ -559,6 +575,7 @@ class MainAppLayout(BoxLayout):
 
 
     def save_file_path(self):
+        from kivy.app import App
         return os.path.join(App.get_running_app().user_data_dir, 'previous_state.json')
 
     def update_start_stop_button_label(self, new_label):
@@ -663,9 +680,16 @@ class MainAppLayout(BoxLayout):
     def test_ding(self,instance):
         self.animated_circle.sounds[4].play()
 
-class MainApp(App):
-    def build(self):
-        return MainAppLayout()
-
 if __name__ == '__main__':
-    MainApp().run()
+    if not os.environ.get('CI'):
+        print("Shibboleth - Breathe3")
+
+        # Import Kivy components only when not running in the CI environment
+        from kivy.app import App
+
+        class MainApp(App):
+            def build(self):
+                return MainAppLayout()
+
+        # Run the Kivy app
+        MainApp().run()

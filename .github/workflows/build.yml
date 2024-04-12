@@ -3,34 +3,70 @@ name: Build APK
 on:
   push:
     branches:
-      - main  # Ensures the action runs on pushes to the main branch
+      - 'main'  # Ensures the action runs on pushes to the main branch
+
+env:
+  CI: 'true'  # Set environment variable globally
 
 jobs:
-  build:
-    runs-on: ubuntu-latest  # Uses the latest Ubuntu runner
-    container: kivy/buildozer  # Utilizes the official Kivy Buildozer Docker image
+  build_android:
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2  # Checks out the repository code
+    - name: 'Checkout'
+      uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
+    - name: 'Set up JDK 17'
+      uses: actions/setup-java@v4
       with:
-        python-version: '3.11'  # Matches the Python version with your local environment
+        java-version: '17'
+        distribution: 'microsoft'
 
-    - name: Install dependencies
+    - name: 'Set up Python'
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'  # Set the Python version you need for your project
+
+    - name: 'Install dependencies'
       run: |
         python -m pip install --upgrade pip
-        pip install buildozer kivy cython pyjnius
+        pip install -r requirements.txt
 
-    - name: Build APK
+    - name: 'Build APK'
       run: |
         buildozer android debug
+        buildozer android release
 
-    - name: Upload APK as Artifact
-      uses: actions/upload-artifact@v2
+    - name: 'Upload APK and AAB as Artifact'
+      uses: actions/upload-artifact@v4
       with:
-        name: app-debug.apk
-        path: bin/*.apk  # Adjust the path according to where Buildozer outputs the APK
+        name: android
+        path: bin/*
 
+  build_windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: 'Checkout'
+      uses: actions/checkout@v4
+
+    - name: 'Set up Python'
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'  # Set the Python version you need for your project
+
+    - name: 'Install dependencies'
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 'Build EXE'
+      run: |
+        pyinstaller --onefile .\main.py --name breathe3 --icon=assets/icon.png --add-data "assets;assets" --noconsole
+
+
+    - name: 'Upload EXE as Artifact'
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows
+        path: dist/*.exe

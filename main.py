@@ -474,8 +474,12 @@ class MainAppLayout(BoxLayout):
         self.start_stop_button = Button(text='Start', bold=True)
         self.start_stop_button.bind(on_press=self.toggle_animation)
         self.start_stop_button.background_color = (0.1,0.1,0.1,0.75)
-
         start_button_layout.add_widget(self.start_stop_button)
+
+        test_ding_button = Button(text='Test\nsound', bold=True, size_hint_x=0.2, halign="center")
+        test_ding_button.bind(on_press=self.test_ding)
+        test_ding_button.background_color = (0.1,0.1,0.1,0.75)
+        start_button_layout.add_widget(test_ding_button)
 
         self.bottom_layout.add_widget(start_button_layout)
 
@@ -655,6 +659,9 @@ class MainAppLayout(BoxLayout):
             self.save_state()  # Save slider state to file whenever a slider value changes
 
         return update_label
+
+    def test_ding(self,instance):
+        self.animated_circle.sounds[4].play()
 
 class MainApp(App):
     def build(self):

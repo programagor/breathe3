@@ -1,0 +1,36 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main  # Ensures the action runs on pushes to the main branch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # Uses the latest Ubuntu runner
+    container: kivy/buildozer  # Utilizes the official Kivy Buildozer Docker image
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2  # Checks out the repository code
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.11'  # Matches the Python version with your local environment
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer kivy cython pyjnius
+
+    - name: Build APK
+      run: |
+        buildozer android debug
+
+    - name: Upload APK as Artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: app-debug.apk
+        path: bin/*.apk  # Adjust the path according to where Buildozer outputs the APK
+

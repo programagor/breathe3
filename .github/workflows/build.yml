@@ -45,7 +45,7 @@ jobs:
 
     - name: 'Build Linux executable'
       run: |
-        pyinstaller --onefile ./main.py --name breathe3 --icon=assets/icon.png --add-data "assets;assets" --noconsole
+        pyinstaller --onefile ./main.py --name breathe3 --icon=assets/icon.png --add-data "assets:assets" --noconsole
     
     - name: 'Upload Linux executable'
       uses: actions/upload-artifact@v4
@@ -54,6 +54,8 @@ jobs:
         path: dist/breathe3
 
   build_windows:
+    if: false
+  
     runs-on: windows-latest
 
     steps:

@@ -3,10 +3,9 @@ name: Build APK
 on:
   push:
     branches:
-      - 'main'  # Ensures the action runs on pushes to the main branch
+      - 'main'
+      - 'dev'
 
-env:
-  CI: 'true'  # Set environment variable globally
 
 jobs:
   build_android:
@@ -25,7 +24,7 @@ jobs:
     - name: 'Set up Python'
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'  # Set the Python version you need for your project
+        python-version: '3.12'
 
     - name: 'Install dependencies'
       run: |
@@ -35,13 +34,24 @@ jobs:
     - name: 'Build APK'
       run: |
         buildozer android debug
-        buildozer android release
+        #buildozer android release
+
 
     - name: 'Upload APK and AAB as Artifact'
       uses: actions/upload-artifact@v4
       with:
         name: android
         path: bin/*
+
+    - name: 'Build Linux executable'
+      run: |
+        pyinstaller --onefile ./main.py --name breathe3 --icon=assets/icon.png --add-data "assets;assets" --noconsole
+    
+    - name: 'Upload Linux executable'
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux
+        path: dist/breathe3
 
   build_windows:
     runs-on: windows-latest
@@ -64,9 +74,8 @@ jobs:
       run: |
         pyinstaller --onefile .\main.py --name breathe3 --icon=assets/icon.png --add-data "assets;assets" --noconsole
 
-
     - name: 'Upload EXE as Artifact'
       uses: actions/upload-artifact@v4
       with:
         name: windows
-        path: dist/*.exe
+        path: dist/breathe3.exe

@@ -19,7 +19,7 @@ from kivy.properties import NumericProperty, ListProperty, BooleanProperty
 from kivy.uix.slider import Slider
 from kivy.uix.label import Label
 
-
+ALLOW_INF = False
 
 wake_lock = None
 
@@ -163,21 +163,23 @@ class AnimatedCircle(Widget):
             if ( (self.duration == float('inf') or self.duration >= 30*60+1) and duration_change < 0 ) :
                 self.duration = 30*60+1 + duration_change
             elif ( (self.duration == float('inf') or self.duration >= 30*60+1 and duration_change > 0) ):
-                self.duration = float('inf')
+                self.duration = float('inf') if ALLOW_INF else 30*60+1
             else:
                 self.duration += duration_change
             self.duration = max(0,self.duration)
             if self.duration >= 30*60+1:
-                self.duration = float('inf')
+                self.duration = float('inf') if ALLOW_INF else 30*60+1
 
             if self.animation_active == False:
                 self.selected_duration = max(0, self.selected_duration + duration_change * 60)  # Update selected_duration as well
 
             # Update UI elements if they exist
             if self.duration_slider and self.duration_label:
+                if self.duration == float('inf') or self.duration >= 30*60+1 and not ALLOW_INF:
+                    self.duration = 30*60
                 if self.duration == float('inf') or self.duration >= 30*60+1:
                     self.duration_slider.value = 30*60+1
-                    self.duration_label.text = f'Time: ∞'
+                    self.duration_label.text = f'Time: ∞' if ALLOW_INF else 30
                 else:
                     self.duration_slider.value = self.duration
                     minutes, seconds = divmod(int(self.duration), 60)
@@ -217,7 +219,7 @@ class AnimatedCircle(Widget):
             Ellipse(pos=(self.center_x - radius_e, self.center_y - radius_e), size=(radius_e * 2, radius_e * 2))
 
     def animate_circle(self, dt):
-        if self.duration != float('inf') and self.duration < 30*60+1:
+        if ( self.duration != float('inf') and self.duration < 30*60+1 ) or not ALLOW_INF:
             self.duration -= dt
             # Update the slider and label if they exist
             if self.duration_slider and self.duration_label:
@@ -288,7 +290,7 @@ class AnimatedCircle(Widget):
             if self.update_button_label:
                 self.update_button_label('Start')
             self.duration = self.selected_duration
-            if self.duration == float('inf') or self.duration >= 30*60+1:
+            if ( self.duration == float('inf') or self.duration >= 30*60+1 ) and ALLOW_INF:
                 self.duration_slider.value = 30*60+1
                 self.duration_label.text = f'Time: ∞'
             else:
@@ -550,7 +552,7 @@ class MainAppLayout(BoxLayout):
         for i, slider in enumerate(self.sliders[:-1]):  # Exclude the duration slider
             slider.value = cycle_times[i]
 
-        if selected_duration == float('inf') or selected_duration >= 30*60+1:
+        if ( selected_duration == float('inf') or selected_duration >= 30*60+1 ) and ALLOW_INF:
             selected_duration = float('inf')
             self.sliders[-1].value = 30*60+1
             self.duration_label.text = f'Time: ∞'
@@ -597,7 +599,7 @@ class MainAppLayout(BoxLayout):
             self.animated_circle.toggle_animation(False)
             if self.countdown_schedule:
                 self.countdown_schedule.cancel()
-                if self.animated_circle.duration == float('inf') or self.animated_circle.duration > 30*60+1:
+                if ( self.animated_circle.duration == float('inf') or self.animated_circle.duration > 30*60+1 ) and ALLOW_INF:
                     self.timer_label.text = '∞'
                 else:
                     self.timer_label.text = f'{int((self.animated_circle.duration+30) // 60)}:00'
@@ -609,7 +611,7 @@ class MainAppLayout(BoxLayout):
         if number > 0:
             self.timer_label.text = str(number)
         else:
-            if self.animated_circle.duration == float('inf') or self.animated_circle.duration >= 30*60+1:
+            if ( self.animated_circle.duration == float('inf') or self.animated_circle.duration >= 30*60+1 ) and ALLOW_INF:
                 self.timer_label.text = '∞'
             else:
                 self.timer_label.text = ''
@@ -659,7 +661,7 @@ class MainAppLayout(BoxLayout):
 
     def update_duration_slider_label(self, slider_label):
         def update_label(instance, value):
-            if value == float('inf') or value >= 30*60+1:  # Assuming >30 is the maximum value representing infinity
+            if ( value == float('inf') or value >= 30*60+1 ) and ALLOW_INF:  # Assuming >30 is the maximum value representing infinity
                 slider_label.text = 'Time: ∞'
                 self.animated_circle.duration = float('inf')
                 self.timer_label.text = '∞'
